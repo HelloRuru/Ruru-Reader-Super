@@ -100,8 +100,7 @@ class BookMetadataCache {
   bool cleanupTmpFiles() const;
 
   // Post-processing to update mappings and sizes
-  // stage8: quickMode=true 跳過 ZIP cumulative size lookup（大書模式用，progress 改用 spine index 比例）
-  bool buildBookBin(const std::string& epubPath, const BookMetadata& metadata, bool quickMode = false);
+  bool buildBookBin(const std::string& epubPath, const BookMetadata& metadata);
 
   // Reading phase (read mode)
   bool load();
