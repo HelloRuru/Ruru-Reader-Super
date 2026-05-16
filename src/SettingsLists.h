@@ -26,7 +26,7 @@ inline std::vector<SettingInfo> getSettingsList() {
                       "hideBatteryPercentage", "Display"),
     SettingInfo::Enum("Refresh Frequency", &CrossPointSettings::refreshFrequency,
                       {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"},"refreshFrequency","Display"),
-    SettingInfo::Enum("UI Theme", &CrossPointSettings::uiTheme, {"Classic", "Lyra"},"UI Theme","Display"),
+    // RuruSuper: UI Theme picker removed — only LyraFlow is shipped, no choice needed.
     SettingInfo::Toggle("Sunlight Fading Compensation", &CrossPointSettings::fadingFix,"Sunlight Fading Compensation","Display"),
 
       // --- Reader ---
