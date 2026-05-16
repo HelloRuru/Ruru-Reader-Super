@@ -31,9 +31,11 @@ namespace {
 //   現在用真實 800px、cover 拉大 +25%（240→300）、整體有大量呼吸
 constexpr int centerCoverWidth = 210;
 constexpr int centerCoverHeight = 300;
-constexpr int sideCoverWidth = 62;
-constexpr int sideInnerHeight = 270;
-constexpr int sideOuterHeight = 240;
+// Miranda Cover Flow 方案 A: 每邊三本（近/中/遠），深度遞減
+constexpr int sideCoverWidth = 58;
+constexpr int sideInnerHeight = 270;   // 近
+constexpr int sideMidHeight = 240;     // 中（介於近遠之間）
+constexpr int sideOuterHeight = 200;   // 遠（比舊版 240 更傾斜，深度感更強）
 constexpr int bookCornerRadius = 6;
 
 // Menu visuals — kept in sync with LyraTheme's anonymous-namespace constants
@@ -134,11 +136,21 @@ void LyraFlowTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const 
 
   // --- Side covers (perspective-projected, drawn outside-in so the center
   //     can land cleanly on top of any near-book overlap) ---
-  auto drawStackedCover = [&](int idx, bool isLeft, bool isFar) {
-    const int hL = isLeft ? sideInnerHeight : sideOuterHeight;
-    const int hR = isLeft ? sideOuterHeight : sideInnerHeight;
+  // Miranda Cover Flow: depth 0=near, 1=mid, 2=far (本邊離中央越遠越扁)
+  auto drawStackedCover = [&](int idx, bool isLeft, int depth) {
+    // 三段高度遞減模擬透視
+    auto pickHeight = [](int d, bool inner) {
+      if (d == 0) return inner ? sideInnerHeight : sideMidHeight;     // near
+      if (d == 1) return inner ? sideMidHeight : sideOuterHeight;     // mid
+      return inner ? sideOuterHeight : 170;                            // far（更扁）
+    };
+    const int hL = isLeft ? pickHeight(depth, true) : pickHeight(depth, false);
+    const int hR = isLeft ? pickHeight(depth, false) : pickHeight(depth, true);
     const int hMax = std::max(hL, hR);
-    const int drawX = isLeft ? (isFar ? 30 : 80) : (isFar ? 385 : 335);
+    // 三段 X 位置：near 80/335、mid 30/385、far -10/430（far 稍微切到螢幕邊）
+    const int sideLeftXs[3]  = {80, 30, -10};
+    const int sideRightXs[3] = {335, 385, 430};
+    const int drawX = isLeft ? sideLeftXs[depth] : sideRightXs[depth];
     const int drawY = centerY + (centerCoverHeight / 2) - (hMax / 2);
 
     const std::string coverPath = UITheme::getCoverThumbPath(recentBooks[idx].coverBmpPath, centerCoverHeight);
@@ -196,15 +208,21 @@ void LyraFlowTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const 
     renderer.fillRect(drawX, drawY + hMax + 1, sideCoverWidth, 2, false);
   };
 
-  const int idx2 = (curIdx + count - 1) % count;  // left-near
-  const int idx3 = (curIdx + count - 2) % count;  // left-far
-  const int idx4 = (curIdx + 1) % count;          // right-near
-  const int idx5 = (curIdx + 2) % count;          // right-far
+  // Miranda Cover Flow: 每邊 3 本（近/中/遠），共 6 本 + 中央 1 本 = 7 本可見
+  const int idx_lN = (curIdx + count - 1) % count;  // left-near
+  const int idx_lM = (curIdx + count - 2) % count;  // left-mid
+  const int idx_lF = (curIdx + count - 3) % count;  // left-far
+  const int idx_rN = (curIdx + 1) % count;          // right-near
+  const int idx_rM = (curIdx + 2) % count;          // right-mid
+  const int idx_rF = (curIdx + 3) % count;          // right-far
 
-  if (count >= 5) drawStackedCover(idx3, true, true);
-  if (count >= 4) drawStackedCover(idx5, false, true);
-  if (count >= 2) drawStackedCover(idx2, true, false);
-  if (count >= 3) drawStackedCover(idx4, false, false);
+  // 由外往內畫，遠的先、近的最後 — 才不會被近的書封遮到
+  if (count >= 7) drawStackedCover(idx_lF, true, 2);   // left-far
+  if (count >= 6) drawStackedCover(idx_rF, false, 2);  // right-far
+  if (count >= 5) drawStackedCover(idx_lM, true, 1);   // left-mid
+  if (count >= 4) drawStackedCover(idx_rM, false, 1);  // right-mid
+  if (count >= 2) drawStackedCover(idx_lN, true, 0);   // left-near
+  if (count >= 3) drawStackedCover(idx_rN, false, 0);  // right-near
 
   // --- Center cover. Peek the bitmap dimensions first so the slot, outline,
   //     and selection border match the cover's true aspect ratio (otherwise
@@ -266,6 +284,19 @@ void LyraFlowTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const 
   //   字級用 SMALL_FONT_ID 省空間（書名跟 brand 都改 SMALL）
   // ============================================================
   (void)stats;
+
+  // Miranda Cover Flow: 中央書封下方加閱讀進度條（細 2px、貼著 cover 底邊 + 8px gap）
+  if (recentBooks[curIdx].progressPercent >= 0) {
+    const int progBarY = actualY + actualCoverHeight + 8;
+    const int progBarH = 2;
+    const int progBarW = actualCoverWidth;
+    const int progBarX = cX;
+    const int progFillW = (progBarW * recentBooks[curIdx].progressPercent) / 100;
+    renderer.fillRectDither(progBarX, progBarY, progBarW, progBarH, Color::LightGray);
+    if (progFillW > 0) {
+      renderer.fillRect(progBarX, progBarY, progFillW, progBarH, true);
+    }
+  }
 
   // 取書名
   std::string filename = recentBooks[curIdx].title.empty() ? recentBooks[curIdx].path : recentBooks[curIdx].title;

@@ -33,7 +33,8 @@ constexpr int kMaxRecentBooks = 10;
 constexpr unsigned long kRecentActionLongPressMs = 1000;
 constexpr int kRecentColumns = 3;
 constexpr int kFileColumns = 3;
-constexpr int kFileMaxRows = 3;
+// Miranda: SD 卡瀏覽區改 2 行（騰出空間給 Cover Flow 主視覺）
+constexpr int kFileMaxRows = 2;
 constexpr int kFileMinRows = 2;
 constexpr int kFileMinTileHeight = 72;
 constexpr int kActionColumns = 3;
