@@ -6,6 +6,7 @@
 
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
+#include "components/themes/lyra/LyraFlowTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
 
 UITheme UITheme::instance;
@@ -28,9 +29,10 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       currentMetrics = &BaseMetrics::values;
       break;
     case CrossPointSettings::UI_THEME::LYRA:
-      Serial.printf("[%lu] [UI] Using Lyra theme\n", millis());
-      currentTheme = new LyraTheme();
-      currentMetrics = &LyraMetrics::values;
+      // RuruSuper: 把 LYRA 主題升級成 LyraFlow（Carousel 翻書動畫 + 3x3 grid）
+      Serial.printf("[%lu] [UI] Using LyraFlow theme (RuruSuper)\n", millis());
+      currentTheme = new LyraFlowTheme();
+      currentMetrics = &LyraFlowMetrics::values;
       break;
   }
 }
