@@ -21,20 +21,12 @@ void UITheme::reload() {
   setTheme(themeType);
 }
 
-void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
-  switch (type) {
-    case CrossPointSettings::UI_THEME::CLASSIC:
-      Serial.printf("[%lu] [UI] Using Classic theme\n", millis());
-      currentTheme = new BaseTheme();
-      currentMetrics = &BaseMetrics::values;
-      break;
-    case CrossPointSettings::UI_THEME::LYRA:
-      // RuruSuper: 把 LYRA 主題升級成 LyraFlow（Carousel 翻書動畫 + 3x3 grid）
-      Serial.printf("[%lu] [UI] Using LyraFlow theme (RuruSuper)\n", millis());
-      currentTheme = new LyraFlowTheme();
-      currentMetrics = &LyraFlowMetrics::values;
-      break;
-  }
+void UITheme::setTheme(CrossPointSettings::UI_THEME /*type*/) {
+  // RuruSuper: 整個專案只跑一個主題 = LyraFlow（Carousel + 3x3 grid + 兔兔）
+  // 即使 settings 殘留 CLASSIC，也強制走 LyraFlow — 確保 UI 一致
+  Serial.printf("[%lu] [UI] Using LyraFlow theme (RuruSuper — single theme)\n", millis());
+  currentTheme = new LyraFlowTheme();
+  currentMetrics = &LyraFlowMetrics::values;
 }
 
 int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,

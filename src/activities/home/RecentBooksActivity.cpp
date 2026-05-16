@@ -285,29 +285,29 @@ void RecentBooksActivity::drawBookTile(const int bookIndex, const int gridX, con
     renderer.drawIcon(CoverIcon, coverX + (coverWidth - 32) / 2, coverY + (coverHeight - 32) / 2, 32, 32);
   }
 
+  // Miranda: progress bar 移出書封下緣（之前 progressBarY = coverY + coverHeight - h - 2，蓋在封面上）
+  //          現在貼在書封下方緊鄰、不再侵蝕封面、高度從 4 降到 2（mono 上 2px 線清晰）
   if (StringUtils::checkFileExtension(recentBooks[bookIndex].path, ".epub") && recentBooks[bookIndex].progressPercent >= 0) {
-    const int progressBarHeight = 4;
-    const int progressBarPadding = 4;
-    const int progressBarWidth = std::max(0, coverWidth - progressBarPadding * 2);
-    const int progressBarX = coverX + progressBarPadding;
-    const int progressBarY = coverY + coverHeight - progressBarHeight - 2;
-    const int progressInnerHeight = std::max(0, progressBarHeight - 2);
-    const int progressInnerWidth = std::max(0, progressBarWidth - 2);
-    const int progressFillWidth = (progressInnerWidth * recentBooks[bookIndex].progressPercent) / 100;
+    const int progressBarHeight = 2;
+    const int progressBarWidth = coverWidth;
+    const int progressBarX = coverX;
+    const int progressBarY = coverY + coverHeight + 2;  // 書封下方 2px gap
+    const int progressFillWidth = (progressBarWidth * recentBooks[bookIndex].progressPercent) / 100;
 
-    if (progressBarWidth > 0 && progressBarHeight > 0) {
-      renderer.fillRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, false);
-      renderer.drawRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, true);
-      if (progressFillWidth > 0 && progressInnerHeight > 0) {
-        renderer.fillRect(progressBarX + 1, progressBarY + 1, progressFillWidth, progressInnerHeight, true);
+    if (progressBarWidth > 0) {
+      // 整條淺底（用 LightGray dither 模擬未讀區）+ 黑色實心（已讀區）
+      renderer.fillRectDither(progressBarX, progressBarY, progressBarWidth, progressBarHeight, Color::LightGray);
+      if (progressFillWidth > 0) {
+        renderer.fillRect(progressBarX, progressBarY, progressFillWidth, progressBarHeight, true);
       }
     }
   }
 
-  // stage15.11: 3x3 grid 書名改回 UI_10（17pt 太大、grid 每格小擠不下）
-  //             17pt 留給 Flow 中央那本大書封跟 reader 內文用
-  const std::string title = renderer.truncatedText(UI_10_FONT_ID, recentBooks[bookIndex].title.c_str(), coverWidth);
-  renderer.drawText(UI_10_FONT_ID, coverX, tileY + tileHeight - titleLineHeight - TITLE_BOTTOM_PADDING, title.c_str(), true);
+  // Miranda: 書名改 BOLD — mono 螢幕上 weight 是唯一可靠的層級工具
+  //          padding 從 4 → 8、給書名呼吸空間
+  const int TITLE_BOTTOM_PADDING_BOLD = 8;
+  const std::string title = renderer.truncatedText(UI_10_FONT_ID, recentBooks[bookIndex].title.c_str(), coverWidth, EpdFontFamily::BOLD);
+  renderer.drawText(UI_10_FONT_ID, coverX, tileY + tileHeight - titleLineHeight - TITLE_BOTTOM_PADDING_BOLD, title.c_str(), true, EpdFontFamily::BOLD);
 }
 
 void RecentBooksActivity::render() {

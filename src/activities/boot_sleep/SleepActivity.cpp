@@ -506,10 +506,13 @@ void SleepActivity::renderDefaultSleepScreen() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
-  // RuruSuper: 兔子 logo + RURU-READER-SUPER
-  renderer.drawImage(RabbitLarge, (pageWidth - 128) / 2, (pageHeight - 128) / 2, 128, 128);
-  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, "RURU-READER-SUPER", true, EpdFontFamily::BOLD);
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, getChineseName("SLEEPING"));
+  // Miranda: 跟 BootActivity 對齊 — cluster 上移 40px + 加版本號
+  const int CLUSTER_OFFSET_Y = -40;
+  const int rabbitTopY = (pageHeight - 128) / 2 + CLUSTER_OFFSET_Y;
+  renderer.drawImage(RabbitLarge, (pageWidth - 128) / 2, rabbitTopY, 128, 128);
+  renderer.drawCenteredText(UI_10_FONT_ID, rabbitTopY + 128 + 12, "RURU-READER-SUPER", true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(SMALL_FONT_ID, rabbitTopY + 128 + 36, getChineseName("SLEEPING"));
+  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, CROSSPOINT_VERSION);  // 加版本號跟 Boot 一致
 
   // Make sleep screen dark unless light is selected in settings
   if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {

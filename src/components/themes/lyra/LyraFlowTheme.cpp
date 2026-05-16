@@ -255,95 +255,13 @@ void LyraFlowTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const 
   }
 
   if (centerOpened) cf.close();
-  // stage15.22 (嚕寶重排版): 跳過下方 stage15.17/18/21 舊邏輯（LIBRARY CARD + 撕邊 + 蓋章）
-  //   走新版：書名 pill 在上、RURU-READER 黑底白字在下
-  if (false) {  // 舊邏輯關閉
-
-  // stage15.17: 中央書本上方加「LIBRARY CARD」圖書卡（借閱者表格感）
-  //             下方保留撕邊虛線
-  {
-    // 圖書卡：在中央封面正上方
-    const int cardW = actualCoverWidth + 20;  // 比封面稍寬
-    const int cardX = cX - 10;
-    const int cardH = 56;  // 圖書卡高度
-    const int cardY = actualY - cardH - 6;  // stage15.21: 從 -10 改 -6、讓 cardY 過守門
-    if (cardY >= rect.y) {  // stage15.21: 從 >rect.y+4 改 >=rect.y、放寬條件
-      // 卡片外框
-      renderer.drawRect(cardX, cardY, cardW, cardH, 2, true);
-      // 卡片頂部「LIBRARY CARD」標頭（黑底反白字）
-      const int headH = 16;
-      renderer.fillRect(cardX, cardY, cardW, headH, true);
-      const char* hdr = "LIBRARY CARD";
-      const int hdrW = renderer.getTextWidth(SMALL_FONT_ID, hdr);
-      const int hdrTH = renderer.getLineHeight(SMALL_FONT_ID);
-      renderer.drawText(SMALL_FONT_ID, cardX + (cardW - hdrW) / 2,
-                        cardY + (headH - hdrTH) / 2 + 1, hdr, /*black=*/false);
-      // 表格資訊區：兩行 — 「借閱者：嚕嚕」「借出日期：—」
-      const int infoY1 = cardY + headH + 6;
-      const int infoY2 = infoY1 + 16;
-      renderer.drawText(SMALL_FONT_ID, cardX + 8, infoY1, "借閱者：嚕嚕", true);
-      renderer.drawText(SMALL_FONT_ID, cardX + 8, infoY2, "借出日期：—", true);
-      // 中央分隔線（表格感）
-      renderer.drawLine(cardX + 8, infoY2 - 4, cardX + cardW - 8, infoY2 - 4, true);
-    }
-
-    // 撕邊虛線：在中央封面正下方
-    const int tearY = actualY + actualCoverHeight + 8;
-    if (tearY < rect.y + rect.height - 16) {
-      for (int dx = cX; dx < cX + actualCoverWidth - 6; dx += 8) {
-        const int segEnd = std::min(dx + 4, cX + actualCoverWidth);
-        renderer.drawLine(dx, tearY, segEnd, tearY, true);
-      }
-    }
-  }
-
-  // --- Title above the center cover (filename, no extension) ---
-  std::string filename = recentBooks[curIdx].title.empty() ? recentBooks[curIdx].path : recentBooks[curIdx].title;
-  if (recentBooks[curIdx].title.empty()) {
-    const size_t lastSlash = filename.find_last_of('/');
-    if (lastSlash != std::string::npos) filename = filename.substr(lastSlash + 1);
-    const size_t lastDot = filename.find_last_of('.');
-    if (lastDot != std::string::npos && lastDot > 0) filename = filename.substr(0, lastDot);
-  }
-
-  // stage15.18: 書名做成「黑底白字 + 圓角」票券感
-  //   嚕寶說「像票券一樣」、跟 LIBRARY CARD 黑底頭部風格統一
-  //   先量字寬、畫黑底矩形、再用 black=false 反白畫字
-  const std::string truncatedTitle =
-      renderer.truncatedText(UI_10_FONT_ID, filename.c_str(), pageWidth - 60, EpdFontFamily::BOLD);
-  const int titleWidth = renderer.getTextWidth(UI_10_FONT_ID, truncatedTitle.c_str(), EpdFontFamily::BOLD);
-  const int titleH = renderer.getLineHeight(UI_10_FONT_ID);
-  const int titlePadX = 10;
-  const int titlePadY = 4;
-  const int titleBgW = titleWidth + titlePadX * 2;
-  const int titleBgH = titleH + titlePadY * 2;
-  const int titleBgX = centerX - titleBgW / 2;
-  const int titleBgY = rect.y - 8;
-  renderer.fillRoundedRect(titleBgX, titleBgY, titleBgW, titleBgH, 6, Color::Black);
-  renderer.drawText(UI_10_FONT_ID, titleBgX + titlePadX, titleBgY + titlePadY, truncatedTitle.c_str(),
-                    /*black=*/false, EpdFontFamily::BOLD);
-
-  // stage15.21: 嚕寶說「閱讀時間、中間區塊都沒看到」、把蓋章加回來
-  //   重排 cover 區後有空間（centerY=126、cover h=200、結束 326、menu 從 350 開始 → 中間 24px 給蓋章）
-  (void)stats;
-  const char* stampText = "HelloRuru 圖書館";
-  const int stampTextW = renderer.getTextWidth(SMALL_FONT_ID, stampText, EpdFontFamily::BOLD);
-  const int stampTextH = renderer.getLineHeight(SMALL_FONT_ID);
-  const int stampPadX = 14;
-  const int stampPadY = 3;
-  const int stampW = stampTextW + stampPadX * 2;
-  const int stampH = stampTextH + stampPadY * 2;
-  const int stampX = centerX - stampW / 2;
-  const int stampY = centerY + centerCoverHeight + 14;
-  // 雙層圓角框（蓋章感）
-  renderer.drawRoundedRect(stampX, stampY, stampW, stampH, 1, 10, true);
-  renderer.drawRoundedRect(stampX + 3, stampY + 3, stampW - 6, stampH - 6, 1, 7, true);
-  renderer.drawText(SMALL_FONT_ID, stampX + (stampW - stampTextW) / 2, stampY + stampPadY,
-                    stampText, true, EpdFontFamily::BOLD);
-  }  // end if(false) 舊邏輯
+  (void)stats;  // BookReadingStats 之後再用，先 mute warning
 
   // ============================================================
-  // stage15.23 (嚕寶協調版): cover +25% + menu 置底
+  // RuruSuper: cover +25% + menu 置底
+  //   書名 SMALL pill 在上、cover 300 在中、RURU-READER SMALL 在下、menu 置底
+  //   字級用 SMALL_FONT_ID 省空間（書名跟 brand 都改 SMALL）
+  // ============================================================
   //   書名 SMALL pill 在上、cover 300 在中、RURU-READER SMALL 在下、menu 置底
   //   字級用 SMALL_FONT_ID 省空間（書名跟 brand 都改 SMALL）
   // ============================================================
