@@ -1,6 +1,35 @@
-# CrossPoint ChineseType
+# Ruru-Reader-Super
 
-XTEink X4 電子紙閱讀器韌體，基於 CrossPoint Reader 修改。這個版本以繁體中文閱讀體驗為核心，整合 EPUB/TXT/Markdown/XTC/XTCH/圖片閱讀、SD 卡檔案管理、OPDS 下載、Wi-Fi 傳書、Calibre 無線傳書、藍牙 HID 翻頁、KOReader Sync、自訂字型、Web 設定，以及 UI 字型子集化。
+<p align="center"><strong>SamLaio 繁中閱讀引擎 + HelloRuru UI 設計</strong><br>
+A fork of <a href="https://github.com/SamLaio/crosspoint-chinesetype">SamLaio/crosspoint-chinesetype</a>
+with the visual design from <a href="https://github.com/HelloRuru/ruru-reader-tw">HelloRuru/ruru-reader-tw</a>.</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/license-AGPL--3.0-D4A5A5?style=flat-square" alt="AGPL-3.0">
+  <img src="https://img.shields.io/badge/platform-ESP32--C3-B8A9C9?style=flat-square" alt="ESP32-C3">
+  <img src="https://img.shields.io/badge/base-zhTW__V2.5.3-A8B5A0?style=flat-square" alt="Base: zhTW_V2.5.3">
+  <img src="https://img.shields.io/badge/UI-RuruSuper__V1.0-E8B4B8?style=flat-square" alt="UI: RuruSuper_V1.0">
+</p>
+
+---
+
+> **這個專案是什麼？**
+> 「功能 = SamLaio、UI = HelloRuru」的合成版。
+> 把 SamLaio 完整的繁中閱讀引擎（直排、二代字型、OPDS、KOReader Sync、Calibre 無線傳書）跟 HelloRuru ruru-reader-tw 的視覺設計（Lyra theme、Carousel 翻書動畫、3×3 grid 首頁、Lucide icon、兔兔 logo）合在一起。
+
+> **What is this?**
+> A "SamLaio engine + HelloRuru UI" mash-up.
+> Keeps SamLaio's full Traditional Chinese reading engine
+> (vertical layout, second-gen font glyphs, OPDS, KOReader sync, Calibre wireless)
+> and brings in HelloRuru's visual design
+> (Lyra theme, Carousel page-flip, 3×3 grid home, Lucide icons, rabbit logo).
+
+授權維持 AGPL-3.0，跟 SamLaio 一致。
+HelloRuru 品牌（兔兔 logo、名稱、配色）以商標保留，詳見 [NOTICE.md](NOTICE.md)。
+
+---
+
+XTEink X4 電子紙閱讀器韌體，整合 EPUB/TXT/Markdown/XTC/XTCH/圖片閱讀、SD 卡檔案管理、OPDS 下載、Wi-Fi 傳書、Calibre 無線傳書、藍牙 HID 翻頁、KOReader Sync、自訂字型、Web 設定，以及 UI 字型子集化。
 
 本專案目前只針對 XTEink X4。刷機有風險，請先備份原廠韌體與 SD 卡資料。
 

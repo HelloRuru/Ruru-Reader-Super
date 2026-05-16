@@ -70,6 +70,22 @@ uint32_t findVerticalCodepoint(const uint32_t cp) {
   return 0;
 }
 
+uint32_t findHorizontalCodepointForVertical(const uint32_t cp) {
+  for (const auto& entry : kVerticalGlyphMap) {
+    if (entry.vertical == cp) {
+      return entry.horizontal;
+    }
+  }
+  return 0;
+}
+
+uint32_t fallbackVerticalSourceCodepoint(const uint32_t cp) {
+  if (findVerticalCodepoint(cp) != 0) {
+    return cp;
+  }
+  return findHorizontalCodepointForVertical(cp);
+}
+
 uint32_t mapVerticalCodepointIfAvailable(const EpdFontFamily& font, const uint32_t cp,
                                          const EpdFontFamily::Style style) {
   const uint32_t verticalCp = findVerticalCodepoint(cp);
@@ -389,6 +405,85 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   }
 }
 
+bool GfxRenderer::getTextPixelBoundsY(const int fontId, const char* text, const int y, int* top, int* bottom,
+                                      const EpdFontFamily::Style style) const {
+  if (!top || !bottom || text == nullptr || *text == '\0') {
+    return false;
+  }
+  if (fontMap.count(fontId) == 0) {
+    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+    return false;
+  }
+
+  const auto font = fontMap.at(fontId);
+  const int baseline = y + getFontAscenderSize(fontId);
+  int minY = 32767;
+  int maxY = -32768;
+  bool found = false;
+
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph) {
+      glyph = font.getGlyph(REPLACEMENT_GLYPH, style);
+    }
+    if (!glyph || glyph->height == 0) {
+      continue;
+    }
+    const int glyphTop = baseline - glyph->top;
+    const int glyphBottom = glyphTop + glyph->height - 1;
+    minY = std::min(minY, glyphTop);
+    maxY = std::max(maxY, glyphBottom);
+    found = true;
+  }
+
+  if (!found) {
+    return false;
+  }
+  *top = minY;
+  *bottom = maxY;
+  return true;
+}
+
+int GfxRenderer::getVerticalTextCellHeight(const int fontId) const {
+  static constexpr const char* samples[] = {"我", "國", "字", "高", "香", "菜", "書", "測", "一", "二", "三"};
+  int minY = 32767;
+  int maxY = -32768;
+  bool found = false;
+
+  for (const char* sample : samples) {
+    int top = 0;
+    int bottom = 0;
+    if (getTextPixelBoundsY(fontId, sample, 0, &top, &bottom)) {
+      minY = std::min(minY, top);
+      maxY = std::max(maxY, bottom);
+      found = true;
+    }
+  }
+
+  if (!found) {
+    return getLineHeight(fontId);
+  }
+  return std::max(1, maxY - minY + 1);
+}
+
+int GfxRenderer::getVerticalTextTopInset(const int fontId) const {
+  static constexpr const char* samples[] = {"我", "國", "字", "高", "香", "菜", "書", "測", "一", "二", "三"};
+  int minY = 32767;
+  bool found = false;
+
+  for (const char* sample : samples) {
+    int top = 0;
+    int bottom = 0;
+    if (getTextPixelBoundsY(fontId, sample, 0, &top, &bottom)) {
+      minY = std::min(minY, top);
+      found = true;
+    }
+  }
+
+  return found ? std::max(0, minY) : 0;
+}
+
 int GfxRenderer::getVerticalTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
   if (fontMap.count(fontId) == 0) {
     Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
@@ -403,7 +498,12 @@ int GfxRenderer::getVerticalTextWidth(const int fontId, const char* text, const 
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     const uint32_t mappedCp = mapVerticalCodepointIfAvailable(font, cp, style);
-    const EpdGlyph* glyph = getRenderableGlyph(font, mappedCp, style);
+    const EpdGlyph* glyph = font.getGlyph(mappedCp, style);
+    if (!glyph && fallbackVerticalSourceCodepoint(cp) != 0) {
+      width += getLineHeight(fontId);
+      continue;
+    }
+    glyph = getRenderableGlyph(font, mappedCp, style);
     if (!glyph) {
       continue;
     }
@@ -414,42 +514,52 @@ int GfxRenderer::getVerticalTextWidth(const int fontId, const char* text, const 
 
 void GfxRenderer::drawVerticalText(const int fontId, const int x, const int y, const char* text, const bool black,
                                    const EpdFontFamily::Style style) const {
-  const int yPos = y + getFontAscenderSize(fontId);
-  int xpos = x;
-
+  // stage15.8 修 BUG：SAM 原版只逐字畫但用 xpos += advanceX（往 X 推進、實際是橫排）
+  //                  真正直排：每個字畫完往 Y 推進、X 留在欄位上
+  //                  欄寬 = lineHeight（直排「行寬」= 字級），每字佔一個 charBoxH 高
   if (text == nullptr || *text == '\0') {
     return;
   }
-
   if (fontMap.count(fontId) == 0) {
     Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
     return;
   }
   const auto font = fontMap.at(fontId);
 
-  const int lineHeight = getLineHeight(fontId);
+  const int lineHeight = getLineHeight(fontId);  // 字級高度（= 直排每字佔的格子高）
+  const int colWidth = lineHeight;                // 直排欄寬 = 字格寬（粗略以方塊字為主）
+  const int ascender = getFontAscenderSize(fontId);
+
+  int cellTop = y;  // 目前要畫的字格頂部 Y
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     const uint32_t mappedCp = mapVerticalCodepointIfAvailable(font, cp, style);
-    const EpdGlyph* glyph = getRenderableGlyph(font, mappedCp, style);
-    if (mappedCp == cp && findVerticalCodepoint(cp) != 0 &&
-        drawFallbackVerticalForm(*this, cp, xpos, y, glyph ? glyph->advanceX : lineHeight, lineHeight, black)) {
-      xpos += glyph ? glyph->advanceX : lineHeight;
+    const uint32_t fallbackCp = fallbackVerticalSourceCodepoint(cp);
+    const EpdGlyph* glyph = font.getGlyph(mappedCp, style);
+
+    // 直排標點 fallback：字型缺直排碼點、原始標點，或 EPUB 已給 FE** 直排碼點時都能畫。
+    if (!glyph && fallbackCp != 0 &&
+        drawFallbackVerticalForm(*this, fallbackCp, x, cellTop, colWidth, lineHeight, black)) {
+      cellTop += lineHeight;
       continue;
     }
+    glyph = getRenderableGlyph(font, mappedCp, style);
 
-    int glyphXPos = xpos;
-    int glyphYPos = yPos;
-    if (mappedCp == cp && glyph && shouldCenterFallbackVerticalPunctuation(cp)) {
-      const int desiredLeft = std::max(0, (static_cast<int>(glyph->advanceX) - static_cast<int>(glyph->width)) / 2);
-      const int desiredTop = std::max(0, (lineHeight - static_cast<int>(glyph->height)) / 2);
-      glyphXPos += desiredLeft - glyph->left;
-      glyphYPos = y + desiredTop + glyph->top;
-    }
-    renderChar(font, mappedCp, &glyphXPos, &glyphYPos, black, style);
+    // 一般字：在欄寬內水平置中、垂直靠 ascender 對齊
     if (glyph) {
-      xpos += glyph->advanceX;
+      const int glyphCellX = x + std::max(0, (colWidth - static_cast<int>(glyph->advanceX)) / 2);
+      // 標點符號：直排格子內再垂直置中（句號逗號這種小符號才不會貼在上邊緣）
+      int glyphCellTop;
+      if (shouldCenterFallbackVerticalPunctuation(cp) && mappedCp == cp) {
+        glyphCellTop = cellTop + std::max(0, (lineHeight - static_cast<int>(glyph->height)) / 2);
+      } else {
+        glyphCellTop = cellTop;
+      }
+      int gx = glyphCellX;
+      int gy = glyphCellTop + ascender;  // renderChar 用 baseline、所以加 ascender
+      renderChar(font, mappedCp, &gx, &gy, black, style);
     }
+    cellTop += lineHeight;
   }
 }
 
@@ -1401,67 +1511,67 @@ void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBo
   }
 }
 void GfxRenderer::drawPngFromTxtpng(const char* txtpng_file_path) const {
-    // 固定txtpng解析度：480×800，與螢幕物理解析度匹配
+    // 固定txtpng分辨率：480×800，与屏幕物理分辨率匹配
     const int pngWidth = 480;
     const int pngHeight = 800;
 
-    // 1. 開啟txtpng檔案（複用你的SdMan檔案操作）
+    // 1. 打开txtpng文件（复用你的SdMan文件操作）
     FsFile txtpng_file;
     if (!SdMan.openFileForRead("GFD", txtpng_file_path, txtpng_file)) {
         Serial.printf("[%lu] [GFX] Failed to open txtpng: %s\n", millis(), txtpng_file_path);
         return;
     }
 
-    // 2. 單行緩衝區：適配480個數值+空格，2048位元組足夠
+    // 2. 单行缓冲区：适配480个数值+空格，2048字节足够
     char line_buffer[2048];
-    // pngY：txtpng的行號（對應原始y座標 0~799）
+    // pngY：txtpng的行号（对应原始y坐标 0~799）
     int pngY = 0;
 
-    // 3. 逐行讀取txtpng（一行對應一個y座標）
+    // 3. 逐行读取txtpng（一行对应一个y坐标）
     while (txtpng_file.available() && pngY < pngHeight) {
-        // 讀取一行並補結束符，避免亂碼
+        // 读取一行并补结束符，避免乱码
         int line_len = txtpng_file.readBytesUntil('\n', line_buffer, sizeof(line_buffer) - 1);
         line_buffer[line_len] = '\0';
 
-        // 計算螢幕實際Y座標：繪製偏移y + txtpng原始y
+        // 计算屏幕实际Y坐标：绘制偏移y + txtpng原始y
         int screenY = pngY;
-        // 超出螢幕高度，直接終止繪製
+        // 超出屏幕高度，直接终止绘制
         if (screenY >= getScreenHeight()) {
             break;
         }
 
-        // 4. 分割當前行的灰度值（一個數值對應一個x座標）
+        // 4. 分割当前行的灰度值（一个数值对应一个x坐标）
         char* token = strtok(line_buffer, " ");
-        // pngX：txtpng的列號（對應原始x座標 0~479）
+        // pngX：txtpng的列号（对应原始x坐标 0~479）
         int pngX = 0;
 
         while (token != nullptr && pngX < pngWidth) {
-            // 計算螢幕實際X座標：繪製偏移x + txtpng原始x
+            // 计算屏幕实际X坐标：绘制偏移x + txtpng原始x
             int screenX =  pngX;
-            // 超出螢幕寬度，跳過當前行剩餘畫素
+            // 超出屏幕宽度，跳过当前行剩余像素
             if (screenX >= getScreenWidth()) {
                 break;
             }
 
-            // 5. 解析灰度值：-1=透明（跳過），0~255=有效灰度
+            // 5. 解析灰度值：-1=透明（跳过），0~255=有效灰度
             int gray_255 = atoi(token);
-            uint8_t val = 0; // 對映為4級灰階值（0~3），對齊drawBitmap的val
+            uint8_t val = 0; // 映射为4级灰阶值（0~3），对齐drawBitmap的val
 
-            // 有效畫素判斷+灰度值對映（0=白，3=黑，1=淺灰，2=深灰）
+            // 有效像素判断+灰度值映射（0=白，3=黑，1=浅灰，2=深灰）
             if (gray_255 != -1 && gray_255 >= 0 && gray_255 <= 255) {
                 if (gray_255 < 64)      val = 3;
                 else if (gray_255 < 128) val = 2;
                 else if (gray_255 < 192) val = 1;
                 else                    val = 0;
             } else {
-                // 透明/無效畫素：跳過，解析下一個
+                // 透明/无效像素：跳过，解析下一个
                 token = strtok(nullptr, " ");
                 pngX++;
                 continue;
             }
 
-            // 6. 按當前渲染模式繪製：與drawBitmap判斷邏輯完全一致
-            // 清空區域
+            // 6. 按当前渲染模式绘制：与drawBitmap判断逻辑完全一致
+            // 清空区域
             if (renderMode == BW && val < 4) {
               drawPixel(screenX, screenY,false);
             }
@@ -1474,16 +1584,114 @@ void GfxRenderer::drawPngFromTxtpng(const char* txtpng_file_path) const {
             drawPixel(screenX, screenY, false);
           }
 
-            // 解析下一個灰度值，x座標+1
+            // 解析下一个灰度值，x坐标+1
             token = strtok(nullptr, " ");
             pngX++;
         }
 
-        // 讀取下一行，y座標+1
+        // 读取下一行，y坐标+1
         pngY++;
     }
 
-    // 7. 關閉檔案，釋放資源
+    // 7. 关闭文件，释放资源
     txtpng_file.close();
     Serial.printf("[%lu] [GFX] Png draw completed (mode: %d)\n", millis(), renderMode);
+}
+
+// 圓角矩形外角遮罩（RoundedRaff theme 用）— 從 Carousel 移植
+// 把矩形的 4 個外角（圓弧外的部分）填成 color，讓書封呈現圓角
+void GfxRenderer::maskRoundedRectOutsideCorners(const int x, const int y, const int width, const int height,
+                                                const int radius, const Color color) const {
+  if (radius <= 0 || color == Color::Clear) {
+    return;
+  }
+
+  const int rr = radius - 1;
+  const int rr2 = rr * rr;
+  for (int dy = 0; dy < radius; dy++) {
+    for (int dx = 0; dx < radius; dx++) {
+      const int tx = rr - dx;
+      const int ty = rr - dy;
+      if (tx * tx + ty * ty > rr2) {
+        if (color == Color::White || color == Color::Black) {
+          bool state = color == Color::Black;
+          drawPixel(x + dx, y + dy, state);
+          drawPixel(x + width - 1 - dx, y + dy, state);
+          drawPixel(x + dx, y + height - 1 - dy, state);
+          drawPixel(x + width - 1 - dx, y + height - 1 - dy, state);
+        } else if (color == Color::LightGray) {
+          drawPixelDither<Color::LightGray>(x + dx, y + dy);
+          drawPixelDither<Color::LightGray>(x + width - 1 - dx, y + dy);
+          drawPixelDither<Color::LightGray>(x + dx, y + height - 1 - dy);
+          drawPixelDither<Color::LightGray>(x + width - 1 - dx, y + height - 1 - dy);
+        } else if (color == Color::DarkGray) {
+          drawPixelDither<Color::DarkGray>(x + dx, y + dy);
+          drawPixelDither<Color::DarkGray>(x + width - 1 - dx, y + dy);
+          drawPixelDither<Color::DarkGray>(x + dx, y + height - 1 - dy);
+          drawPixelDither<Color::DarkGray>(x + width - 1 - dx, y + height - 1 - dy);
+        }
+      }
+    }
+  }
+}
+
+// 透視梯形繪圖（Flow theme 輪播用）— 從 Carousel 移植，砍掉 fontCacheManager_ 檢查
+void GfxRenderer::drawPerspectiveBitmap(const Bitmap& bitmap, const int x, const int y, const int w, const int hL,
+                                        const int hR) const {
+  if (w <= 0 || hL <= 0 || hR <= 0) return;
+
+  const int srcW = bitmap.getWidth();
+  const int srcH = bitmap.getHeight();
+  if (srcW <= 0 || srcH <= 0) return;
+
+  const int hMax = (hL > hR) ? hL : hR;
+  const int screenW = getScreenWidth();
+  const int screenH = getScreenHeight();
+  const bool topDown = bitmap.isTopDown();
+
+  // Same row buffer pattern as drawBitmap (2 bits per pixel quantized).
+  const int outputRowSize = (srcW + 3) / 4;
+  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
+  auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
+  if (!outputRow || !rowBytes) {
+    Serial.printf("[%lu] [GFX] !! Failed to allocate perspective row buffers\n", millis());
+    free(outputRow);
+    free(rowBytes);
+    return;
+  }
+
+  for (int srcY = 0; srcY < srcH; srcY++) {
+    if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
+      Serial.printf("[%lu] [GFX] Failed to read row %d from bitmap (perspective)\n", millis(), srcY);
+      free(outputRow);
+      free(rowBytes);
+      return;
+    }
+    const int srcRowIndex = topDown ? srcY : (srcH - 1 - srcY);
+
+    for (int dx = 0; dx < w; dx++) {
+      const int colH = (w == 1) ? hL : (hL + (hR - hL) * dx / (w - 1));
+      if (colH <= 0) continue;
+      const int colTop = (hMax - colH) / 2;
+      const int dy = (srcRowIndex * colH) / srcH;
+      const int screenX = x + dx;
+      const int screenY = y + colTop + dy;
+      if (screenX < 0 || screenX >= screenW) continue;
+      if (screenY < 0 || screenY >= screenH) continue;
+
+      const int srcX = (dx * srcW) / w;
+      const uint8_t val = (outputRow[srcX / 4] >> (6 - ((srcX * 2) % 8))) & 0x3;
+
+      if (renderMode == BW && val < 3) {
+        drawPixel(screenX, screenY);
+      } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
+        drawPixel(screenX, screenY, false);
+      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
+        drawPixel(screenX, screenY, false);
+      }
+    }
+  }
+
+  free(outputRow);
+  free(rowBytes);
 }

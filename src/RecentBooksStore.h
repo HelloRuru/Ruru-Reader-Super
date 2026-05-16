@@ -7,6 +7,7 @@ struct RecentBook {
   std::string title;
   std::string author;
   std::string coverBmpPath;
+  int progressPercent = -1;  // -1 = 未知 / 非 EPUB
 
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
